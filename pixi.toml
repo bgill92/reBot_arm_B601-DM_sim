@@ -1,0 +1,12 @@
+[workspace]
+name = "reBot_arm_B601-DM_sim"
+channels = ["conda-forge"]
+platforms = [{ name = "linux-64-cuda", platform = "linux-64", cuda = "12.8", glibc = "2.35" }]
+
+[dependencies]
+python = "3.12.*"
+pytorch-gpu = ">=2.7"
+cuda-version = ">=12.8"
+
+[pypi-dependencies]
+genesis-world = ">=1.3.3"
