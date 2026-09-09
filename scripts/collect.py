@@ -35,8 +35,20 @@ def features(image_size: int) -> dict:
     }
 
 
-def collect(env: RebotPickPlaceEnv, n_episodes: int, root: Path, repo_id: str, seed0: int = 0) -> int:
-    """Collect until `n_episodes` successes. Returns the number saved."""
+def collect(
+    env: RebotPickPlaceEnv,
+    n_episodes: int,
+    root: Path,
+    repo_id: str,
+    seed0: int = 0,
+    max_attempts: int | None = None,
+) -> int:
+    """Collect until `n_episodes` successes, or `max_attempts` episode attempts are exhausted.
+
+    Returns the number saved.
+    """
+    if max_attempts is None:
+        max_attempts = 3 * n_episodes
     if root.exists():
         if not (root / "meta" / "info.json").exists():
             raise SystemExit(f"{root} exists and does not look like a LeRobot dataset; refusing to delete it.")
@@ -44,33 +56,39 @@ def collect(env: RebotPickPlaceEnv, n_episodes: int, root: Path, repo_id: str, s
     image_size = env.observation_space["pixels"]["front"].shape[0]
     fps = env.metadata["render_fps"]
     ds = LeRobotDataset.create(repo_id=repo_id, fps=fps, features=features(image_size), root=root, robot_type="rebot_arm_b601_dm")
-    saved, seed = 0, seed0
-    while saved < n_episodes:
-        obs, _ = env.reset(seed=seed)
-        actions = oracle.plan_episode(env, seed=seed)
-        term = False
-        for a in actions:
-            ds.add_frame(
-                {
-                    "observation.images.front": obs["pixels"]["front"],
-                    "observation.images.wrist": obs["pixels"]["wrist"],
-                    "observation.state": obs["agent_pos"],
-                    "action": np.asarray(a, dtype=np.float32),
-                    "task": env.TASK,
-                }
-            )
-            obs, _, term, trunc, _ = env.step(a)
-            if term or trunc:
+    saved, seed, attempts = 0, seed0, 0
+    try:
+        while saved < n_episodes:
+            attempts += 1
+            obs, _ = env.reset(seed=seed)
+            actions = oracle.plan_episode(env, seed=seed)
+            term = False
+            for a in actions:
+                ds.add_frame(
+                    {
+                        "observation.images.front": obs["pixels"]["front"],
+                        "observation.images.wrist": obs["pixels"]["wrist"],
+                        "observation.state": obs["agent_pos"],
+                        "action": np.asarray(a, dtype=np.float32),
+                        "task": env.TASK,
+                    }
+                )
+                obs, _, term, trunc, _ = env.step(a)
+                if term or trunc:
+                    break
+            if term:
+                ds.save_episode()
+                saved += 1
+                print(f"seed {seed}: success ({saved}/{n_episodes})")
+            else:
+                ds.clear_episode_buffer()
+                print(f"seed {seed}: failed, discarded")
+            seed += 1
+            if saved < n_episodes and attempts >= max_attempts:
+                print(f"giving up after {attempts} attempts ({saved}/{n_episodes} saved)")
                 break
-        if term:
-            ds.save_episode()
-            saved += 1
-            print(f"seed {seed}: success ({saved}/{n_episodes})")
-        else:
-            ds.clear_episode_buffer()
-            print(f"seed {seed}: failed, discarded")
-        seed += 1
-    ds.finalize()
+    finally:
+        ds.finalize()
     return saved
 
 

@@ -14,6 +14,8 @@ WRIST_CAM_OFFSET = np.array([0.06, 0.0, 0.03])
 WRIST_CAM_LOOKAT = np.array([0.0, 0.0, 0.20])
 WRIST_CAM_UP = np.array([1.0, 0.0, 0.0])
 
+LIFT_HEIGHT = 0.04  # Cube must rise this far above the table at some point to count as picked up.
+
 
 class RebotPickPlaceEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
@@ -92,6 +94,7 @@ class RebotPickPlaceEnv(gym.Env):
         quat = Rotation.from_euler("z", yaw).as_quat(scalar_first=True)
         self.cube.set_pos(pos)
         self.cube.set_quat(quat)
+        self._lifted = False
         for _ in range(20):  # settle
             self.scene.step()
         return self._get_obs(), {"is_success": False}
@@ -103,15 +106,19 @@ class RebotPickPlaceEnv(gym.Env):
         self._set_gripper_target(float(action[6]))
         for _ in range(self.substeps):
             self.scene.step()
+        if self.cube_pos()[2] - S.TABLE_HEIGHT - S.CUBE_SIZE / 2 > LIFT_HEIGHT:
+            self._lifted = True
         success = self.is_success()
         return self._get_obs(), float(success), success, False, {"is_success": success}
 
     def is_success(self) -> bool:
+        """Success = the cube was lifted at least LIFT_HEIGHT above the table at some point,
+        now rests inside the zone, and the gripper has released it."""
         c = self.cube_pos()
         in_zone = np.all(np.abs(c[:2] - self.zone_world[:2]) <= S.ZONE_SIZE / 2)
         on_table = abs(c[2] - (S.TABLE_HEIGHT + S.CUBE_SIZE / 2)) < 0.01
         released = self.gripper_opening() > 0.03
-        return bool(in_zone and on_table and released)
+        return bool(in_zone and on_table and released and self._lifted)
 
     def _update_wrist_cam(self) -> None:
         p = self.link6.get_pos().cpu().numpy().reshape(3)

@@ -36,16 +36,29 @@ def test_step_tracks_joint_target(env):
     target = S.HOME + np.array([0.3, 0.0, 0.0, 0.0, 0.0, 0.0])
     for _ in range(15):
         obs, r, term, trunc, info = env.step(np.append(target, S.GRIPPER_MAX))
-    assert abs(obs["agent_pos"][0] - target[0]) < 0.05
+    assert np.allclose(obs["agent_pos"][:6], target, atol=0.05)
     assert r == 0.0 and term is False and info["is_success"] is False
 
 
-def test_success_when_cube_teleported_into_zone(env):
+def test_no_success_when_cube_shoved_into_zone_without_lift(env):
     env.reset(seed=0)
     env.cube.set_pos(env.zone_world + np.array([0.0, 0.0, S.CUBE_SIZE / 2 + 0.002]))
     for _ in range(5):
         obs, r, term, trunc, info = env.step(np.append(S.HOME, S.GRIPPER_MAX))
-    assert term is True and r == 1.0 and info["is_success"] is True
+    assert term is False and info["is_success"] is False
+
+
+def test_success_after_lift_then_place(env):
+    env.reset(seed=0)
+    # 15 cm, not 10: free fall over a single step's substeps eats ~5-6 cm before the
+    # post-step lift check runs, so 10 cm would drop below LIFT_HEIGHT before latching.
+    env.cube.set_pos(env.zone_world + np.array([0.0, 0.0, 0.15]))
+    env.step(np.append(S.HOME, S.GRIPPER_MAX))
+    assert env._lifted is True
+    env.cube.set_pos(env.zone_world + np.array([0.0, 0.0, S.CUBE_SIZE / 2 + 0.002]))
+    for _ in range(5):
+        obs, r, term, trunc, info = env.step(np.append(S.HOME, S.GRIPPER_MAX))
+    assert term is True and r == 1.0
 
 
 def test_registered_env_has_time_limit():
@@ -54,6 +67,11 @@ def test_registered_env_has_time_limit():
     e = gym.make("gym_rebot/RebotPickPlace-v0")
     assert e.spec.max_episode_steps == 300
     assert e.unwrapped.task_description == e.unwrapped.TASK
+
+    e.reset(seed=0)
+    for _ in range(300):
+        obs, r, term, trunc, info = e.step(np.append(S.HOME, S.GRIPPER_MAX))
+    assert trunc is True and term is False
     e.close()
 
 
