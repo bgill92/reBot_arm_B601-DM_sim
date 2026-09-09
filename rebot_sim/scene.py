@@ -79,7 +79,12 @@ def build_room(scene: gs.Scene) -> None:
 
 
 def add_arm(scene: gs.Scene):
-    return scene.add_entity(gs.morphs.URDF(file=str(URDF), fixed=True, pos=tuple(ARM_POS)))
+    # decompose_robot_error_threshold: Genesis defaults robots to one convex hull per mesh, which turns
+    # each gripper finger into a wedge (the crossed rack juts inward at the base) that squirts the cube
+    # out of the jaws instead of pinching it. Convex decomposition restores the flat, parallel pads.
+    return scene.add_entity(
+        gs.morphs.URDF(file=str(URDF), fixed=True, pos=tuple(ARM_POS), decompose_robot_error_threshold=0.15)
+    )
 
 
 def add_cube(scene: gs.Scene):
