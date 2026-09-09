@@ -80,6 +80,7 @@ def top_down_pose(p_local: np.ndarray, yaw: float) -> pin.SE3:
 
 
 def solve_ik(model, coll, target: pin.SE3, q_init: np.ndarray, seed: int = 0):
+    q_init = np.array(q_init, dtype=float)  # pyroboplan's DifferentialIk mutates init_state in place.
     ik = DifferentialIk(
         model,
         data=model.createData(),
@@ -119,7 +120,9 @@ class _Planner:
         """Straight-line TCP move from the current pose to `target`. Returns (N, 6) or None."""
         data = self.model.createData()
         pin.framesForwardKinematics(self.model, data, q_start)
-        start = data.oMf[self.model.getFrameId(TCP_FRAME)]
+        # .copy(): oMf is a live reference into `data`, which the IK solver below shares and overwrites,
+        # so an uncopied start pose would drift mid-plan and skew the waypoint spacing.
+        start = data.oMf[self.model.getFrameId(TCP_FRAME)].copy()
         ik = DifferentialIk(
             self.model,
             data=data,
@@ -137,7 +140,8 @@ class _Planner:
             # tracks an actual straight line instead of jumping between the two endpoints.
             options=CartesianPlannerOptions(use_trapezoidal_scaling=False, max_linear_velocity=0.2),
         )
-        ok, _, q = planner.generate(q_start, CONTROL_DT)
+        # np.array: generate() feeds q_start to DifferentialIk, which mutates its init_state in place.
+        ok, _, q = planner.generate(np.array(q_start, dtype=float), CONTROL_DT)
         return q.T if ok else None
 
 
@@ -160,13 +164,18 @@ def _hold(q, opening, n=GRIPPER_SETTLE_STEPS) -> list[np.ndarray]:
     return [action.copy() for _ in range(n)]
 
 
+def _fail(stage: str) -> list:
+    print(f"oracle: {stage} planning failed")
+    return []
+
+
 def plan_episode(env, seed: int = 0) -> list[np.ndarray]:
     """Plan a full pick-and-place from the env's current (privileged) state.
 
     Returns the list of 7-d actions (6 joint targets + gripper opening) to feed to env.step,
     or an empty list if any segment fails to plan.
     """
-    P = _get_planner()
+    planner = _get_planner()
     cube_local = env.cube_pos() - S.ARM_POS
     yaw = Rotation.from_quat(env.cube_quat(), scalar_first=True).as_euler("xyz")[2]
     yaw = (yaw + np.pi / 4) % (np.pi / 2) - np.pi / 4  # cube is symmetric every 90 deg
@@ -179,51 +188,51 @@ def plan_episode(env, seed: int = 0) -> list[np.ndarray]:
     pre_place = top_down_pose(zone_local + np.array([0.0, 0.0, S.CUBE_SIZE / 2]) + up, 0.0)
 
     q0 = env.joint_pos()
-    q_pre_grasp = solve_ik(P.model, P.coll, pre_grasp, q0, seed)
-    q_pre_place = solve_ik(P.model, P.coll, pre_place, q0, seed)
+    q_pre_grasp = solve_ik(planner.model, planner.coll, pre_grasp, q0, seed)
+    q_pre_place = solve_ik(planner.model, planner.coll, pre_place, q0, seed)
     if q_pre_grasp is None or q_pre_place is None:
-        return []
+        return _fail("pre-grasp/pre-place IK")
 
     actions: list[np.ndarray] = []
 
     # 1. free-space move above the cube
-    seg = P.joint_path(q0, q_pre_grasp, seed)
+    seg = planner.joint_path(q0, q_pre_grasp, seed)
     if seg is None:
-        return []
+        return _fail("move to pre-grasp")
     actions += _with_gripper(seg, GRIP_OPEN)
 
     # 2. straight down, close
-    seg = P.cartesian_path(q_pre_grasp, grasp)
+    seg = planner.cartesian_path(q_pre_grasp, grasp)
     if seg is None:
-        return []
+        return _fail("descend to grasp")
     actions += _with_gripper(seg, GRIP_OPEN)
     q_grasp = seg[-1]
     actions += _hold(q_grasp, GRIP_CLOSED)
 
     # 3. straight up (fingers closed)
-    seg = P.cartesian_path(q_grasp, pre_grasp)
+    seg = planner.cartesian_path(q_grasp, pre_grasp)
     if seg is None:
-        return []
+        return _fail("lift")
     actions += _with_gripper(seg, GRIP_CLOSED)
     q_lift = seg[-1]
 
     # 4. free-space move above the zone
-    seg = P.joint_path(q_lift, q_pre_place, seed)
+    seg = planner.joint_path(q_lift, q_pre_place, seed)
     if seg is None:
-        return []
+        return _fail("move to pre-place")
     actions += _with_gripper(seg, GRIP_CLOSED)
 
     # 5. straight down, open
-    seg = P.cartesian_path(q_pre_place, place)
+    seg = planner.cartesian_path(q_pre_place, place)
     if seg is None:
-        return []
+        return _fail("descend to place")
     actions += _with_gripper(seg, GRIP_CLOSED)
     q_place = seg[-1]
     actions += _hold(q_place, GRIP_OPEN)
 
     # 6. retreat
-    seg = P.cartesian_path(q_place, pre_place)
+    seg = planner.cartesian_path(q_place, pre_place)
     if seg is None:
-        return []
+        return _fail("retreat")
     actions += _with_gripper(seg, GRIP_OPEN)
     return actions

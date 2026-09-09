@@ -34,7 +34,8 @@ def test_in_collision_detects_arm_through_table():
 def run_oracle_episode(env, seed):
     env.reset(seed=seed)
     actions = oracle.plan_episode(env, seed=seed)
-    assert len(actions) > 0
+    if not actions:  # a planning failure is an episode failure, not a test error
+        return False
     term = False
     for a in actions:
         _, _, term, trunc, _ = env.step(a)

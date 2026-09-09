@@ -82,6 +82,7 @@ def add_arm(scene: gs.Scene):
     # decompose_robot_error_threshold: Genesis defaults robots to one convex hull per mesh, which turns
     # each gripper finger into a wedge (the crossed rack juts inward at the base) that squirts the cube
     # out of the jaws instead of pinching it. Convex decomposition restores the flat, parallel pads.
+    # 0.15 is Genesis' own default threshold for rigid objects; only robots default to no decomposition.
     return scene.add_entity(
         gs.morphs.URDF(file=str(URDF), fixed=True, pos=tuple(ARM_POS), decompose_robot_error_threshold=0.15)
     )
