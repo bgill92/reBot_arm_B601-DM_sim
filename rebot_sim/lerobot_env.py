@@ -18,8 +18,6 @@ class RebotEnv(EnvConfig):
         default_factory=lambda: {
             ACTION: PolicyFeature(type=FeatureType.ACTION, shape=(7,)),
             "agent_pos": PolicyFeature(type=FeatureType.STATE, shape=(7,)),
-            "pixels/front": PolicyFeature(type=FeatureType.VISUAL, shape=(256, 256, 3)),
-            "pixels/wrist": PolicyFeature(type=FeatureType.VISUAL, shape=(256, 256, 3)),
         }
     )
     features_map: dict[str, str] = field(
@@ -31,7 +29,7 @@ class RebotEnv(EnvConfig):
         }
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         shape = (self.image_size, self.image_size, 3)
         self.features["pixels/front"] = PolicyFeature(type=FeatureType.VISUAL, shape=shape)
         self.features["pixels/wrist"] = PolicyFeature(type=FeatureType.VISUAL, shape=shape)

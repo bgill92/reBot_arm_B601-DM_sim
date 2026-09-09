@@ -4,6 +4,8 @@ Importing this package registers `gym_rebot/RebotPickPlace-v0` and, when lerobot
 installed, the `rebot` EnvConfig used by `lerobot-eval`.
 """
 
+import importlib.util
+
 from gymnasium.envs.registration import register
 
 register(
@@ -12,9 +14,6 @@ register(
     max_episode_steps=300,
 )
 
-try:
+# lerobot is optional: the env and oracle work without it; only lerobot-eval needs the config.
+if importlib.util.find_spec("lerobot") is not None:
     from rebot_sim import lerobot_env  # noqa: F401
-except ModuleNotFoundError as e:
-    if e.name is None or not e.name.startswith("lerobot"):
-        raise
-    # lerobot is optional: the env and oracle work without it; only lerobot-eval needs the config.
