@@ -14,5 +14,7 @@ register(
 
 try:
     from rebot_sim import lerobot_env  # noqa: F401
-except ImportError:  # lerobot not installed or lerobot_env not written yet
-    pass
+except ModuleNotFoundError as e:
+    if e.name is None or not e.name.startswith("lerobot"):
+        raise
+    # lerobot is optional: the env and oracle work without it; only lerobot-eval needs the config.
