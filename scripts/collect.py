@@ -1,5 +1,7 @@
 """Run the oracle through the env and write successful episodes as a LeRobot v3 dataset.
 
+Recreates `--root` from scratch, deleting a previous dataset there.
+
 Usage:
     pixi run python scripts/collect.py --episodes 200 --root data/rebot_pick_place
 """
@@ -36,9 +38,12 @@ def features(image_size: int) -> dict:
 def collect(env: RebotPickPlaceEnv, n_episodes: int, root: Path, repo_id: str, seed0: int = 0) -> int:
     """Collect until `n_episodes` successes. Returns the number saved."""
     if root.exists():
+        if not (root / "meta" / "info.json").exists():
+            raise SystemExit(f"{root} exists and does not look like a LeRobot dataset; refusing to delete it.")
         shutil.rmtree(root)
     image_size = env.observation_space["pixels"]["front"].shape[0]
-    ds = LeRobotDataset.create(repo_id=repo_id, fps=10, features=features(image_size), root=root, robot_type="rebot_arm_b601_dm")
+    fps = env.metadata["render_fps"]
+    ds = LeRobotDataset.create(repo_id=repo_id, fps=fps, features=features(image_size), root=root, robot_type="rebot_arm_b601_dm")
     saved, seed = 0, seed0
     while saved < n_episodes:
         obs, _ = env.reset(seed=seed)
