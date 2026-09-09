@@ -1,3 +1,5 @@
 .pixi/
 frame.png
 __pycache__/
+outputs/
+data/

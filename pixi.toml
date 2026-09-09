@@ -3,10 +3,31 @@ name = "reBot_arm_B601-DM_sim"
 channels = ["conda-forge"]
 platforms = [{ name = "linux-64-cuda", platform = "linux-64", cuda = "12.8", glibc = "2.35" }]
 
+[activation.env]
+# Prevent the interpreter from picking up ~/.local/lib/pythonX.Y/site-packages,
+# which can shadow this env's cmeel-based packages (pinocchio, coal) with an
+# incompatible user install of the same package names.
+PYTHONNOUSERSITE = "1"
+
 [dependencies]
 python = "3.12.*"
-pytorch-gpu = ">=2.7"
+pytorch-gpu = ">=2.7,<2.12"
+torchvision = "*"
 cuda-version = ">=12.8"
+numpy = "<2.3"
+ffmpeg = "*"
+pytest = "*"
+packaging = ">=24.2,<26.0"
+pillow = ">=9.2.0,<12.0"
+fsspec = ">=2023.1.0,<=2026.2.0"
 
 [pypi-dependencies]
 genesis-world = ">=1.3.3"
+pyroboplan = ">=1.3.1"
+gymnasium = ">=1.1.1"
+lerobot = { version = ">=0.6.1", extras = ["smolvla", "dataset"] }
+
+[tasks]
+test = "pytest -x -q tests"
+sim = "python sim.py"
+collect = "python scripts/collect.py"
