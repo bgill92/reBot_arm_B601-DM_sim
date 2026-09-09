@@ -33,6 +33,8 @@ CUBE_X_RANGE = (0.15, 0.35)
 CUBE_Y_RANGE = (-0.15, 0.15)
 ZONE_SIZE = 0.10
 ZONE_XY = (0.25, -0.25)
+ZONE_THICKNESS = 0.002
+ZONE_Z_OFFSET = 0.001  # Lift the marker slightly to avoid z-fighting with the table top.
 
 COLOR_FLOOR = (0.55, 0.45, 0.35)
 COLOR_WALL = (0.85, 0.85, 0.8)
@@ -41,6 +43,8 @@ COLOR_CUBE = (0.9, 0.1, 0.1)
 COLOR_ZONE = (0.1, 0.8, 0.1)
 
 
+# `gs._initialized` is a private Genesis flag; the library exposes no public
+# equivalent to check whether gs.init() has already run.
 def init_genesis() -> None:
     if not gs._initialized:
         gs.init(backend=gs.gpu)
@@ -84,8 +88,9 @@ def add_cube(scene: gs.Scene):
 
 
 def add_zone(scene: gs.Scene):
-    pos = local_to_world(ZONE_XY) + np.array([0, 0, 0.001])
-    return _box(scene, (ZONE_SIZE, ZONE_SIZE, 0.002), pos, COLOR_ZONE, fixed=True, collision=False)
+    pos = local_to_world(ZONE_XY) + np.array([0, 0, ZONE_Z_OFFSET])
+    # collision=False: this is a visual-only marker, so the cube and fingers pass through it.
+    return _box(scene, (ZONE_SIZE, ZONE_SIZE, ZONE_THICKNESS), pos, COLOR_ZONE, fixed=True, collision=False)
 
 
 def set_arm_gains(arm, arm_dofs, finger_dofs) -> None:
