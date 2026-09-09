@@ -6,13 +6,9 @@ cd "$(dirname "$0")/.."
 CKPT="${1:-outputs/train/smolvla_rebot/checkpoints/last/pretrained_model}"
 N="${2:-50}"
 # The lerobot-eval console script does not put the repo root on sys.path; the plugin import needs it.
-export PYTHONPATH="${PYTHONPATH:-}:."
-# smolvla_base was pretrained with fixed camera{1,2,3} slots; the checkpoint's config.json
-# (loaded verbatim by make_policy) still declares those keys, so lerobot_eval's pre-load
-# feature validator rejects our env's observation.images.front/wrist before the checkpoint's
-# saved policy_preprocessor.json rename ever runs. Passing --rename_map here (matching
-# scripts/train.sh) renames the env features and, per lerobot/policies/factory.py, skips
-# that validator. camera3 is simply left unused.
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}."
+# Same rename as scripts/train.sh (see there): the checkpoint keeps smolvla_base's camera1/2/3 slot names.
+# Genesis cannot run inside AsyncVectorEnv subprocesses; batch size must stay 1.
 exec pixi run lerobot-eval \
   --env.type=rebot \
   --env.discover_packages_path=rebot_sim \
