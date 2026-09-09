@@ -60,7 +60,12 @@ scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50
 | Policy                | Success rate                          | How |
 |------------------------|----------------------------------------|-----|
 | Oracle (pyroboplan)     | 20/20 (tests), 200/200 (collection)    | `pixi run test`, `scripts/collect.py` |
-| SmolVLA (fine-tuned)    | PENDING                                | `scripts/train.sh` + `scripts/eval.sh` |
+| SmolVLA (fine-tuned)    | 19/50 = 38% (200 demos, 20k steps)     | `scripts/train.sh` + `scripts/eval.sh` |
+
+Success requires the cube to have been lifted at least 4 cm at some point, to rest inside the zone, and the
+gripper to have released it (`LIFT_HEIGHT` in `rebot_sim/env.py`), so shoving the cube into the zone does not
+count. The SmolVLA number is from `scripts/eval.sh` on `checkpoints/last` (seeds 1000+, disjoint from the
+training seeds 0-199); the 10k-step checkpoint scored 3/10 on a quick interim check.
 
 ## Notes
 
