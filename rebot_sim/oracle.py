@@ -133,9 +133,9 @@ class _Planner:
             ik,
             # ponytail: linear (not trapezoidal) time scaling - pyroboplan's trapezoidal profile returns
             # alpha = 1.0000000000000002 at the final sample, which scipy Slerp rejects with a ValueError.
-            options=CartesianPlannerOptions(
-                use_trapezoidal_scaling=False, max_linear_velocity=0.2, max_linear_acceleration=0.5
-            ),
+            # 0.2 m/s (pyroboplan defaults to 1.0) spreads the 8 cm approach over ~5 waypoints, so the PD
+            # tracks an actual straight line instead of jumping between the two endpoints.
+            options=CartesianPlannerOptions(use_trapezoidal_scaling=False, max_linear_velocity=0.2),
         )
         ok, _, q = planner.generate(q_start, CONTROL_DT)
         return q.T if ok else None
@@ -156,7 +156,8 @@ def _with_gripper(q_path, opening) -> list[np.ndarray]:
 
 
 def _hold(q, opening, n=GRIPPER_SETTLE_STEPS) -> list[np.ndarray]:
-    return [np.append(q, opening).astype(np.float32)] * n
+    action = np.append(q, opening).astype(np.float32)
+    return [action.copy() for _ in range(n)]
 
 
 def plan_episode(env, seed: int = 0) -> list[np.ndarray]:
