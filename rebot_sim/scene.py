@@ -4,6 +4,7 @@ from pathlib import Path
 
 import genesis as gs
 import numpy as np
+import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_DIR = REPO_ROOT / "assets" / "rebot_arm_dm"
@@ -48,6 +49,11 @@ COLOR_ZONE = (0.1, 0.8, 0.1)
 def init_genesis() -> None:
     if not gs._initialized:
         gs.init(backend=gs.gpu)
+        # gs.init installs a global torch default-device mode (CUDA). That mode also rewrites
+        # device-less calls like torch.as_tensor in third-party code (lerobot's processors) and
+        # breaks lerobot-eval. Genesis places its own tensors explicitly, so removing the mode
+        # is safe. Passing None removes the mode instead of swapping in a CPU one.
+        torch.set_default_device(None)
 
 
 def local_to_world(xy) -> np.ndarray:
