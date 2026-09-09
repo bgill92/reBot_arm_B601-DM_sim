@@ -67,6 +67,7 @@ class RebotPickPlaceEnv(gym.Env):
     def joint_pos(self) -> np.ndarray:
         return self.arm.get_dofs_position(self.arm_dofs).cpu().numpy().reshape(6)
 
+    # Both fingers are driven symmetrically, so the left finger alone is the opening.
     def gripper_opening(self) -> float:
         return float(self.arm.get_dofs_position(self.finger_dofs).cpu().numpy().reshape(2)[0])
 
@@ -77,7 +78,6 @@ class RebotPickPlaceEnv(gym.Env):
     # ----- gym API -----
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self._step_count = 0
         self.arm.set_dofs_position(S.HOME, self.arm_dofs, zero_velocity=True)
         self.arm.set_dofs_position(np.array([S.GRIPPER_MAX, -S.GRIPPER_MAX]), self.finger_dofs, zero_velocity=True)
         self.arm.control_dofs_position(S.HOME, self.arm_dofs)
@@ -85,7 +85,9 @@ class RebotPickPlaceEnv(gym.Env):
 
         x = self.np_random.uniform(*S.CUBE_X_RANGE)
         y = self.np_random.uniform(*S.CUBE_Y_RANGE)
+        # The cube has 4-fold symmetry, so yaw in [0, pi/2) covers every distinct grasp orientation.
         yaw = self.np_random.uniform(0.0, np.pi / 2)
+        # Spawn 2 mm above the table so the settle steps drop it into clean contact.
         pos = S.local_to_world((x, y)) + np.array([0.0, 0.0, S.CUBE_SIZE / 2 + 0.002])
         quat = Rotation.from_euler("z", yaw).as_quat(scalar_first=True)
         self.cube.set_pos(pos)
@@ -94,18 +96,38 @@ class RebotPickPlaceEnv(gym.Env):
             self.scene.step()
         return self._get_obs(), {"is_success": False}
 
+    def step(self, action):
+        action = np.asarray(action, dtype=np.float32).reshape(7)
+        q = np.clip(action[:6], S.JOINT_LOWER, S.JOINT_UPPER)
+        self.arm.control_dofs_position(q, self.arm_dofs)
+        self._set_gripper_target(float(action[6]))
+        for _ in range(self.substeps):
+            self.scene.step()
+        success = self.is_success()
+        return self._get_obs(), float(success), success, False, {"is_success": success}
+
+    def is_success(self) -> bool:
+        c = self.cube_pos()
+        in_zone = np.all(np.abs(c[:2] - self.zone_world[:2]) <= S.ZONE_SIZE / 2)
+        on_table = abs(c[2] - (S.TABLE_HEIGHT + S.CUBE_SIZE / 2)) < 0.01
+        released = self.gripper_opening() > 0.03
+        return bool(in_zone and on_table and released)
+
     def _update_wrist_cam(self) -> None:
         p = self.link6.get_pos().cpu().numpy().reshape(3)
         q = self.link6.get_quat().cpu().numpy().reshape(4)
         R = Rotation.from_quat(q, scalar_first=True).as_matrix()
         self.cam_wrist.set_pose(pos=p + R @ WRIST_CAM_OFFSET, lookat=p + R @ WRIST_CAM_LOOKAT, up=R @ WRIST_CAM_UP)
 
+    def _render_front(self) -> np.ndarray:
+        return np.asarray(self.cam_front.render(rgb=True)[0])[..., :3]
+
     def _get_obs(self) -> dict:
         self._update_wrist_cam()
-        front = np.asarray(self.cam_front.render(rgb=True)[0])[..., :3]
+        front = self._render_front()
         wrist = np.asarray(self.cam_wrist.render(rgb=True)[0])[..., :3]
         state = np.append(self.joint_pos(), self.gripper_opening()).astype(np.float32)
         return {"pixels": {"front": front, "wrist": wrist}, "agent_pos": state}
 
     def render(self):
-        return np.asarray(self.cam_front.render(rgb=True)[0])[..., :3]
+        return self._render_front()
