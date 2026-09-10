@@ -60,7 +60,7 @@ pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
 
 ## Dataset
 
-`scripts/collect.py` collected 200 successful episodes (12,110 frames, 10 fps, LeRobot v3 format, ~29 MB) to
+`scripts/collect.py` collected 200 successful episodes (15,527 frames, 10 fps, LeRobot v3 format, ~62 MB) to
 `data/rebot_pick_place`; the oracle succeeded on 200/200 attempted seeds.
 
 ## Baseline results
@@ -68,7 +68,7 @@ pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
 | Policy                | Success rate                          | How |
 |------------------------|----------------------------------------|-----|
 | Oracle (pyroboplan)     | 20/20 (tests), 200/200 (collection)    | `pixi run test`, `scripts/collect.py` |
-| SmolVLA (fine-tuned)    | 19/50 = 38% (200 demos, 20k steps)     | `scripts/train.sh` + `scripts/eval.sh` |
+| SmolVLA (fine-tuned)    | 42/50 = 84% (200 demos, 20k steps)     | `scripts/train.sh` + `scripts/eval.sh` |
 
 Success requires the cube to have been lifted at least 4 cm at some point, to rest inside the zone, and the
 gripper to have released it (`LIFT_HEIGHT` in `rebot_sim/env.py`), so shoving the cube into the zone does not
@@ -77,6 +77,10 @@ training seeds 0-199); the 10k-step checkpoint scored 3/10 on a quick interim ch
 
 ## Notes
 
+- The 84% replaced an earlier 38% from the same recipe. Three changes between them: front camera moved from
+  2.5 m to 1.3 m (cube went from a few pixels to clearly visible), the oracle now visits a fixed hover pose so the
+  wrist camera sees the cube before any cube-dependent motion, and near-overhead lighting removed a wall shadow
+  across half the table. They were changed together, so their individual contributions are not separated.
 - `assets/rebot_arm_dm/` is `Rebot_Arm_description/DM/` from upstream (CERN-OHL-W v2, see LICENSE there). Local
   change: added `<inertial>` to both finger links (upstream omits them; Genesis' MuJoCo parser rejects massless
   moving bodies).

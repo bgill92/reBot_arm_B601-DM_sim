@@ -1,6 +1,6 @@
 # Handoff — VLA pick-and-place testbed
 
-Last updated: 2026-09-10. Branch `vla-testbed` (20 commits on top of `main` @ `05c1a7f`), **not merged**.
+Last updated: 2026-09-10. Branch `vla-testbed` (24 commits on top of `main` @ `05c1a7f`), **not merged**.
 Working tree clean; all 19 tests pass (`pixi run test`, ~1–2.5 min).
 
 ## What exists
@@ -20,16 +20,18 @@ green square (cube xy/yaw random, zone fixed). See `README.md` for usage and `do
 
 ## Results so far
 
-**Stale as of 2026-09-10:** the front camera was moved closer (`CAM_POS`/`CAM_LOOKAT` in `scene.py`, 2.5 m → 1.3 m)
-and the oracle now visits a fixed tilted hover pose (`HOVER`/`HOVER_PITCH` in `oracle.py`) before reaching, ~18 extra frames/demo.
-The dataset and checkpoints below were recorded with the old view; re-collect and retrain before comparing numbers.
+Second cycle, 2026-09-10, after moving the front camera closer (2.5 m → 1.3 m), adding the oracle's fixed
+tilted hover pose (wrist camera sees the cube before any cube-dependent motion) and overhead lighting.
+Success went **38% → 84%** with the same 200 demos / 20k steps recipe. First-cycle artifacts kept as `*_oldcam`.
 
 | Artifact | Location (git-ignored) | Numbers |
 |---|---|---|
-| Dataset | `data/rebot_pick_place` | 200 episodes, 12,110 frames, 10 fps, 29 MB, seeds 0–199 |
-| SmolVLA checkpoints | `outputs/train/smolvla_rebot/checkpoints/{005000,010000,015000,020000,last}` | 20k steps, batch 8, ~4.5 step/s, ~3.2 GB VRAM, loss 2.89 → 0.05 |
-| Final eval | `outputs/eval/smolvla_rebot/eval_info.json` + videos | **19/50 = 38%** (lift-required success metric, eval seeds 1000+) |
-| Interim eval | `outputs/eval/ckpt10k` | 3/10 at 10k steps (measured before the lift latch was added) |
+| Dataset | `data/rebot_pick_place` | 200 episodes, 15,527 frames, 10 fps, 62 MB, seeds 0–199, 200/200 oracle success |
+| SmolVLA checkpoints | `outputs/train/smolvla_rebot/checkpoints/{005000,010000,015000,020000,last}` | 20k steps, batch 8, 75 min, loss 1.31 → 0.057 |
+| Final eval | `outputs/eval/smolvla_rebot/eval_info.json` + videos | **42/50 = 84%** (lift-required success metric, eval seeds 1000+); failures at episodes 8, 10, 11, 12, 25, 27, 31, 35 |
+| First cycle (old camera, no hover) | `data/rebot_pick_place_oldcam`, `outputs/{train,eval}/smolvla_rebot_oldcam` | 19/50 = 38%, 12,110 frames, loss 2.89 → 0.05 |
+| Interim eval | `outputs/eval/ckpt10k` | 3/10 at 10k steps, first cycle, before the lift latch was added |
+| Cycle logs | `outputs/logs/{cycle,collect,train,eval}.log`, `outputs/logs/cycle.sh` | full collect → train → eval chain |
 | Smoke artifacts | `outputs/train/smoke`, `outputs/eval/smoke` | throwaway |
 
 ## Non-obvious things learned (all fixed in code, documented in README "Notes")
@@ -52,13 +54,13 @@ The dataset and checkpoints below were recorded with the old view; re-collect an
 4. No `close()` on the env; Genesis scenes leak in-process (harmless at n_envs=1).
 5. `slow` pytest marker defined but not excluded by default.
 6. `env` rejects `render_mode=` kwarg despite advertising `rgb_array`.
-7. `eval_info.json` per-episode structure was not inspected; the 38% is from `pc_success`.
+7. Second-cycle failure videos (8 episodes listed above) not yet classified (miss grasp vs drop vs place miss).
 
-## Suggested next steps to raise the 38%
+## Suggested next steps to raise the 84%
 
 - More demos (`--episodes 500+`; collection ~6 s/episode), longer training (`STEPS=50000`), and/or `GRIPPER_SETTLE_STEPS=8`.
 - Randomize the arm start pose or the zone to reduce near-duplicate early frames.
-- Inspect failure videos in `outputs/eval/smolvla_rebot/videos/` to classify failure modes (miss grasp vs drop vs place miss).
+- Inspect the 8 failure videos in `outputs/eval/smolvla_rebot/videos/rebot_0/` to classify failure modes.
 - Try `--policy.n_action_steps` smaller than 50 (chunk replan more often) at eval.
 
 ## How to resume
