@@ -20,6 +20,9 @@ green square (cube xy/yaw random, zone fixed). See `README.md` for usage and `do
 
 ## Results so far
 
+**Stale as of 2026-09-10:** the front camera was moved closer (`CAM_POS`/`CAM_LOOKAT` in `scene.py`, 2.5 m → 1.3 m).
+The dataset and checkpoints below were recorded with the old view; re-collect and retrain before comparing numbers.
+
 | Artifact | Location (git-ignored) | Numbers |
 |---|---|---|
 | Dataset | `data/rebot_pick_place` | 200 episodes, 12,110 frames, 10 fps, 29 MB, seeds 0–199 |

@@ -25,8 +25,10 @@ TABLE_HEIGHT = 0.75
 TABLE_W, TABLE_D, TABLE_T = 1.2, 0.8, 0.04
 LEG_S = 0.05
 ARM_POS = np.array([-(TABLE_W / 2 - 0.1), 0.0, TABLE_HEIGHT])  # near the back (-x) edge; arm reaches +x
-CAM_POS = (1.6, -1.8, 1.5)
-CAM_LOOKAT = (-0.1, 0.0, TABLE_HEIGHT + 0.25)
+# Front camera: 3/4 view ~1.3 m from the workspace center so the cube fills more than a few pixels
+# at 256^2 while the whole arm stays in frame through reach and lift.
+CAM_LOOKAT = (-0.25, 0.0, TABLE_HEIGHT + 0.05)  # cube-range center in world coords, just above the table
+CAM_POS = (0.45, -0.9, TABLE_HEIGHT + 0.65)
 
 # Task objects. xy ranges are in the arm-base frame (x forward, y left).
 CUBE_SIZE = 0.03
