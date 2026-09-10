@@ -1,6 +1,6 @@
 # Handoff — VLA pick-and-place testbed
 
-Last updated: 2026-09-10. Branch `vla-testbed` (24 commits on top of `main` @ `05c1a7f`), **not merged**.
+Last updated: 2026-09-10. Branch `vla-testbed` (26 commits on top of `main` @ `05c1a7f`), **not merged**.
 Working tree clean; all 19 tests pass (`pixi run test`, ~1–2.5 min).
 
 ## What exists
@@ -31,7 +31,7 @@ Success went **38% → 84%** with the same 200 demos / 20k steps recipe. First-c
 | Final eval | `outputs/eval/smolvla_rebot/eval_info.json` + videos | **42/50 = 84%** (lift-required success metric, eval seeds 1000+); failures at episodes 8, 10, 11, 12, 25, 27, 31, 35 |
 | First cycle (old camera, no hover) | `data/rebot_pick_place_oldcam`, `outputs/{train,eval}/smolvla_rebot_oldcam` | 19/50 = 38%, 12,110 frames, loss 2.89 → 0.05 |
 | Interim eval | `outputs/eval/ckpt10k` | 3/10 at 10k steps, first cycle, before the lift latch was added |
-| Cycle logs | `outputs/logs/{cycle,collect,train,eval}.log`, `outputs/logs/cycle.sh` | full collect → train → eval chain |
+| Cycle logs | `outputs/logs/{cycle,collect,train,eval}.log` (chain script now tracked as `scripts/cycle.sh`) | full collect → train → eval chain |
 | Smoke artifacts | `outputs/train/smoke`, `outputs/eval/smoke` | throwaway |
 
 ## Non-obvious things learned (all fixed in code, documented in README "Notes")

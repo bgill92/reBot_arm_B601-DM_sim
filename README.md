@@ -10,29 +10,75 @@ square**. The cube's xy position and yaw are randomized on every reset; the targ
 
 ```bash
 pixi install
+pixi run test                     # 19 tests, ~2 min (Genesis JIT-builds kernels + a 20-seed oracle check)
+pixi run python sim.py            # bare viewer smoke test: drives the arm through waypoints, no policy
+```
 
-# Viewer / smoke test
-pixi run python sim.py            # interactive viewer, drives the arm through waypoints
-pixi run python sim.py --headless # no viewer, saves frame.png, asserts waypoint tracking
+Everything below runs from the repo root. The first Genesis scene build in a process takes ~45 s (finger mesh
+decomposition); subsequent resets are fast.
 
-# Tests (16 tests, ~2 min: Genesis JIT-builds its kernels + a 20-seed oracle success-rate check)
-pixi run test
+## Watching the policies
 
-# Collect an oracle demonstration dataset (writes a LeRobot v3 dataset, recreating --root)
-pixi run python scripts/collect.py --episodes 200 --root data/rebot_pick_place
+Both commands open the Genesis viewer plus a second window showing the two policy cameras side by side
+(front | wrist), refreshed on every observation. Viewer controls: left-drag orbits, scroll zooms, right-drag pans.
 
-# Fine-tune SmolVLA on the collected dataset (batch 8 uses ~3.2 GB VRAM at ~4.5 step/s on an RTX 5070 Laptop)
+```bash
+# Oracle (scripted expert). Nothing is saved. Prints success/fail per seed.
+pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
+
+# Trained SmolVLA. OUTPUT_DIR keeps it from overwriting the recorded benchmark in outputs/eval/smolvla_rebot.
+OUTPUT_DIR=outputs/eval/watch scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 5 --env.show_viewer=true
+```
+
+- The cube's xy/yaw come from the episode seed. `lerobot-eval` uses `seed + episode_index` with `--seed=1000` by
+  default (training used seeds 0-199). To replay one specific layout: `... 1 --env.show_viewer=true --seed=1003`.
+  From the recorded 84% run, seeds 1008, 1010, 1011, 1012, 1025, 1027, 1031, 1035 failed; the rest of 1000-1049
+  succeeded. SmolVLA samples noise per action chunk, so the same seed can still go either way on replay.
+- Each episode ends on success or after 300 steps (30 s at 10 Hz); the next episode resets in the same window.
+- Without `--env.show_viewer=true`, `eval.sh` runs headless and still writes an mp4 per episode to
+  `<OUTPUT_DIR>/videos/rebot_0/eval_episode_<i>.mp4` (front camera) plus `eval_info.json` (`pc_success`).
+- Any extra `eval.sh` arguments after `[checkpoint] [n_episodes]` go straight to `lerobot-eval`, e.g.
+  `--policy.n_action_steps=10` to replan the action chunk more often (default 50).
+
+## Training a policy
+
+The pipeline is collect -> train -> eval. Each step is its own script; `scripts/cycle.sh` chains them.
+
+```bash
+# 1. Collect oracle demonstrations as a LeRobot v3 dataset (~3 s/episode). Recreates --root from scratch.
+pixi run python scripts/collect.py --episodes 200 --root data/rebot_pick_place --seed 0
+
+# 2. Fine-tune lerobot/smolvla_base (~75 min for 20k steps, ~3.2 GB VRAM at batch 8 on an RTX 5070 Laptop).
+#    Checkpoints land in outputs/train/smolvla_rebot/checkpoints/{005000,...,last}/pretrained_model.
 BATCH_SIZE=8 STEPS=20000 scripts/train.sh
 
-# Evaluate a checkpoint in-sim
+# 3. Evaluate a checkpoint on 50 held-out seeds (~2 min headless).
 scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50
 
-# Watch the policy live in the Genesis viewer (extra args are passed through to lerobot-eval)
-scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 5 --env.show_viewer=true
-
-# Watch the oracle (scripted expert) live in the Genesis viewer, nothing saved
-pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
+# All three in one go (refuses to overwrite an existing dataset/checkpoint dir; move them aside first).
+for d in data/rebot_pick_place outputs/train/smolvla_rebot outputs/eval/smolvla_rebot; do mv "$d" "${d}_old"; done
+mkdir -p outputs/logs && scripts/cycle.sh 200 50 > outputs/logs/cycle.log 2>&1 &
+tail -f outputs/logs/cycle.log         # stage markers + final pc_success; per-stage logs in outputs/logs/
 ```
+
+`train.sh` and `eval.sh` forward extra arguments to `lerobot-train` / `lerobot-eval`, so any lerobot flag the
+script does not already set can be appended (see `lerobot-train --help`).
+
+### Tuning knobs
+
+Which script you must re-run depends on what you change:
+
+| Change | Where | Then re-run |
+|---|---|---|
+| Number of demos, collection seeds | `collect.py --episodes/--seed` | collect, train, eval |
+| Camera pose / FOV, lighting, room, cube/zone geometry | `rebot_sim/scene.py` (`CAM_*`, `LIGHT_DIR`, `AMBIENT`, `CUBE_*_RANGE`, `ZONE_XY`), `rebot_sim/env.py` (`WRIST_CAM_*`, `image_size`) | collect, train, eval (observations change) |
+| Oracle behaviour: hover pose, approach height, gripper hold length, grip force | `rebot_sim/oracle.py` (`HOVER`, `HOVER_PITCH`, `APPROACH`, `GRIPPER_SETTLE_STEPS`, `GRIP_CLOSED`) | collect, train, eval |
+| Training length, batch size, LR, save frequency | `STEPS`, `BATCH_SIZE` env vars or lerobot flags to `train.sh` | train, eval |
+| Action chunking at inference | `--policy.n_action_steps=<k>` to `eval.sh` (k <= 50) | eval only |
+| Episode length, success threshold | `lerobot_env.py` (`episode_length`), `env.py` (`LIFT_HEIGHT`) | eval only (dataset unaffected) |
+
+Anything that changes what the cameras see or what the oracle does invalidates the dataset and checkpoints;
+keep old runs by renaming their directories (this repo keeps the first cycle as `*_oldcam`).
 
 ## Observation / action space
 
@@ -57,6 +103,8 @@ pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
 - `collect.py` — runs the oracle through the env and writes successful episodes as a LeRobot v3 dataset.
 - `train.sh` — fine-tunes `lerobot/smolvla_base` on the collected dataset.
 - `eval.sh` — evaluates a checkpoint in the Genesis env via stock `lerobot-eval`.
+- `watch_oracle.py` — runs the oracle in the Genesis viewer, nothing saved.
+- `cycle.sh` — collect -> train -> eval in one go, with per-stage logs under `outputs/logs/`.
 
 ## Dataset
 
@@ -102,5 +150,3 @@ training seeds 0-199); the 10k-step checkpoint scored 3/10 on a quick interim ch
   would fail without it; `eval.sh` exports `PYTHONPATH=.` before invoking it.
 - A few tunables are marked `ponytail:` in the code and may need retuning against real hardware: `TCP_OFFSET`
   and `GRIP_CLOSED` in `oracle.py`, and the PD gains in `scene.set_arm_gains`.
-- `pixi run test` takes ~2 min: most of that is Genesis JIT-building its kernels plus the 20-seed oracle
-  success-rate test.
