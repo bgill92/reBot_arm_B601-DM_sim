@@ -14,6 +14,7 @@ class RebotEnv(EnvConfig):
     fps: int = 10
     episode_length: int = 300
     image_size: int = 256
+    show_viewer: bool = False
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             ACTION: PolicyFeature(type=FeatureType.ACTION, shape=(7,)),
@@ -36,4 +37,4 @@ class RebotEnv(EnvConfig):
 
     @property
     def gym_kwargs(self) -> dict:
-        return {"image_size": self.image_size, "max_episode_steps": self.episode_length}
+        return {"image_size": self.image_size, "max_episode_steps": self.episode_length, "show_viewer": self.show_viewer}

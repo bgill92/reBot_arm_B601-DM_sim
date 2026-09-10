@@ -26,6 +26,12 @@ BATCH_SIZE=8 STEPS=20000 scripts/train.sh
 
 # Evaluate a checkpoint in-sim
 scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50
+
+# Watch the policy live in the Genesis viewer (extra args are passed through to lerobot-eval)
+scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 5 --env.show_viewer=true
+
+# Watch the oracle (scripted expert) live in the Genesis viewer, nothing saved
+pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
 ```
 
 ## Observation / action space

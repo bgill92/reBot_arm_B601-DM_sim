@@ -17,6 +17,28 @@ WRIST_CAM_UP = np.array([1.0, 0.0, 0.0])
 LIFT_HEIGHT = 0.04  # Cube must rise this far above the table at some point to count as picked up.
 
 
+class _CamWindow:
+    """One tkinter window showing front | wrist side by side, refreshed on every observation."""
+
+    # ponytail: tkinter, not Genesis camera GUI=True. lerobot pulls opencv-python-headless, which
+    # shadows genesis-world's opencv-python, so cv2.imshow raises. Swap for GUI=True if that changes.
+    def __init__(self) -> None:
+        import tkinter as tk
+
+        self._root = tk.Tk()
+        self._root.title("rebot cameras: front | wrist")
+        self._label = tk.Label(self._root)
+        self._label.pack()
+
+    def show(self, front: np.ndarray, wrist: np.ndarray) -> None:
+        from PIL import Image, ImageTk
+
+        img = ImageTk.PhotoImage(Image.fromarray(np.hstack([front, wrist])))
+        self._label.configure(image=img)
+        self._label.image = img  # tkinter keeps only a weak ref
+        self._root.update()
+
+
 class RebotPickPlaceEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
     TASK = "pick up the red cube and place it in the green square"
@@ -38,6 +60,7 @@ class RebotPickPlaceEnv(gym.Env):
         self.cam_front = self.scene.add_camera(res=res, pos=S.CAM_POS, lookat=S.CAM_LOOKAT, fov=40, GUI=False)
         self.cam_wrist = self.scene.add_camera(res=res, pos=S.CAM_POS, lookat=S.CAM_LOOKAT, fov=70, GUI=False)
         self.scene.build()
+        self._cam_window = _CamWindow() if show_viewer else None
 
         self.arm_dofs = [self.arm.get_joint(n).dofs_idx_local[0] for n in S.ARM_JOINTS]
         self.finger_dofs = [self.arm.get_joint(n).dofs_idx_local[0] for n in S.FINGER_JOINTS]
@@ -133,6 +156,8 @@ class RebotPickPlaceEnv(gym.Env):
         self._update_wrist_cam()
         front = self._render_front()
         wrist = np.asarray(self.cam_wrist.render(rgb=True)[0])[..., :3]
+        if self._cam_window is not None:
+            self._cam_window.show(front, wrist)
         state = np.append(self.joint_pos(), self.gripper_opening()).astype(np.float32)
         return {"pixels": {"front": front, "wrist": wrist}, "agent_pos": state}
 
