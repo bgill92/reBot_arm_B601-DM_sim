@@ -1,6 +1,6 @@
 # Handoff — VLA pick-and-place testbed
 
-Last updated: 2026-09-10. Branch `vla-testbed` (26 commits on top of `main` @ `05c1a7f`), **not merged**.
+Last updated: 2026-09-10. Merged into `main` (fast-forward, 2026-09-10); `vla-testbed` kept as a pointer to the same commit.
 Working tree clean; all 19 tests pass (`pixi run test`, ~1–2.5 min).
 
 ## What exists
@@ -71,4 +71,4 @@ pixi run test                                              # 19 passed
 scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50
 ```
 Full training reproduction: `pixi run python scripts/collect.py --episodes 200` (~20 min) → `scripts/train.sh` (~75 min) → `scripts/eval.sh` (~5 min).
-Decision pending from the user: merge `vla-testbed` into `main`, open a PR, or keep the branch.
+`vla-testbed` is merged into `main`; delete the branch or keep branching from `main`.
