@@ -48,7 +48,9 @@ pixi run python scripts/watch_oracle.py --episodes 5 --seed 0
   target zone) used by the viewer, the gym env, and the oracle.
 - `env.py` — `RebotPickPlaceEnv`, the gymnasium env: reset/step, camera rendering, success check.
 - `oracle.py` — classical pick-and-place planner: Pinocchio IK (`pyroboplan`) + RRT-Connect for free-space moves,
-  Cartesian straight-line segments for the grasp/place approach and retreat.
+  Cartesian straight-line segments for the grasp/place approach and retreat. Every episode first visits a fixed
+  tilted "hover" pose from which the wrist camera sees the whole cube range, so demos contain a canonical
+  look-then-reach frame for the VLA to localize from.
 - `lerobot_env.py` — `RebotEnv` `EnvConfig` so `lerobot-eval --env.type=rebot` can drive the gym env.
 
 `scripts/`

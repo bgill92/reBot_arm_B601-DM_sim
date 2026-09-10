@@ -21,6 +21,10 @@ TCP_FRAME = "end_link"
 TCP_OFFSET = 0.0
 APPROACH = 0.08
 GRIP_OPEN = S.GRIPPER_MAX
+# Fixed "look" pose visited before every grasp: from here the wrist camera sees the whole cube spawn
+# range and the zone (arm too short for a top-down view that high; 45 deg pitch keeps it reachable).
+HOVER = np.array([0.15, 0.0, 0.35])  # arm-base frame
+HOVER_PITCH = np.radians(45.0)  # tool axis tilted from straight-down toward +x
 GRIP_CLOSED = 0.012  # ponytail: per-finger opening that squeezes the 3 cm cube; tune on hardware.
 CONTROL_DT = 0.1  # 10 Hz, matches env substeps * sim dt
 JOINT_SPEED = 1.0  # rad/s used to time joint-space segments
@@ -67,14 +71,17 @@ def in_collision(model, coll, q) -> bool:
     return check_collisions_at_state(model, coll, q, model.createData(), coll.createData())
 
 
-def top_down_pose(p_local: np.ndarray, yaw: float) -> pin.SE3:
+def top_down_pose(p_local: np.ndarray, yaw: float, pitch: float = 0.0) -> pin.SE3:
     """TCP pose (arm-base frame) with the tool axis pointing down and fingers closing along `yaw`.
 
-    end_link x = tool axis -> world -z. end_link y = finger axis -> rotated by `yaw` in the xy plane.
+    end_link x = tool axis -> world -z, tilted by `pitch` toward +x. end_link y = finger axis ->
+    rotated by `yaw` in the xy plane (re-orthogonalized against the tilted tool axis).
     """
-    x_axis = np.array([0.0, 0.0, -1.0])
+    x_axis = np.array([np.sin(pitch), 0.0, -np.cos(pitch)])
     y_axis = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
     z_axis = np.cross(x_axis, y_axis)
+    z_axis /= np.linalg.norm(z_axis)
+    y_axis = np.cross(z_axis, x_axis)
     R = np.column_stack([x_axis, y_axis, z_axis])
     return pin.SE3(R, np.asarray(p_local, dtype=float) - np.array([0.0, 0.0, TCP_OFFSET]))
 
@@ -188,15 +195,23 @@ def plan_episode(env, seed: int = 0) -> list[np.ndarray]:
     pre_place = top_down_pose(zone_local + np.array([0.0, 0.0, S.CUBE_SIZE / 2]) + up, 0.0)
 
     q0 = env.joint_pos()
+    q_hover = solve_ik(planner.model, planner.coll, top_down_pose(HOVER, 0.0, HOVER_PITCH), q0, seed)
     q_pre_grasp = solve_ik(planner.model, planner.coll, pre_grasp, q0, seed)
     q_pre_place = solve_ik(planner.model, planner.coll, pre_place, q0, seed)
-    if q_pre_grasp is None or q_pre_place is None:
-        return _fail("pre-grasp/pre-place IK")
+    if q_hover is None or q_pre_grasp is None or q_pre_place is None:
+        return _fail("hover/pre-grasp/pre-place IK")
 
     actions: list[np.ndarray] = []
 
+    # 0. look: cube-independent move to the fixed hover pose, so the wrist camera sees the cube
+    #    before any cube-dependent motion starts (gives the VLA a canonical frame to localize from)
+    seg = planner.joint_path(q0, q_hover, seed)
+    if seg is None:
+        return _fail("move to hover")
+    actions += _with_gripper(seg, GRIP_OPEN)
+
     # 1. free-space move above the cube
-    seg = planner.joint_path(q0, q_pre_grasp, seed)
+    seg = planner.joint_path(q_hover, q_pre_grasp, seed)
     if seg is None:
         return _fail("move to pre-grasp")
     actions += _with_gripper(seg, GRIP_OPEN)

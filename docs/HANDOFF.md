@@ -20,7 +20,8 @@ green square (cube xy/yaw random, zone fixed). See `README.md` for usage and `do
 
 ## Results so far
 
-**Stale as of 2026-09-10:** the front camera was moved closer (`CAM_POS`/`CAM_LOOKAT` in `scene.py`, 2.5 m → 1.3 m).
+**Stale as of 2026-09-10:** the front camera was moved closer (`CAM_POS`/`CAM_LOOKAT` in `scene.py`, 2.5 m → 1.3 m)
+and the oracle now visits a fixed tilted hover pose (`HOVER`/`HOVER_PITCH` in `oracle.py`) before reaching, ~18 extra frames/demo.
 The dataset and checkpoints below were recorded with the old view; re-collect and retrain before comparing numbers.
 
 | Artifact | Location (git-ignored) | Numbers |
