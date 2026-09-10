@@ -1,7 +1,15 @@
 # Handoff — VLA pick-and-place testbed
 
-Last updated: 2026-09-10. Merged into `main` (fast-forward, 2026-09-10); `vla-testbed` kept as a pointer to the same commit.
-Working tree clean; all 19 tests pass (`pixi run test`, ~1–2.5 min).
+Last updated: 2026-09-10. Everything is on `main` (`vla-testbed` was fast-forward merged the same day and is
+now a redundant pointer). Remote: `github.com/bgill92/reBot_arm_B601-DM_sim`. Working tree clean; all 19 tests
+pass (`pixi run test`, ~2 min). Unrelated local branch `nyx` (path-traced rendering) is not pushed.
+
+## Status in one paragraph
+
+Sim, oracle, dataset collection, SmolVLA fine-tuning and in-sim eval all work end to end. The current policy
+scores **84%** (42/50) on held-out seeds. That number came from one cycle in which three things changed at once
+(closer front camera, oracle hover pose, overhead lighting), so nothing is known yet about which of them mattered
+or why the remaining 8 episodes fail. Those two questions are the next steps.
 
 ## What exists
 
@@ -17,6 +25,8 @@ green square (cube xy/yaw random, zone fixed). See `README.md` for usage and `do
 | LeRobot EnvConfig plugin (`--env.type=rebot`) | `rebot_sim/lerobot_env.py` | done |
 | Collector → LeRobot v3 | `scripts/collect.py` | done |
 | Train / eval wrappers | `scripts/train.sh`, `scripts/eval.sh` | done |
+| Full cycle script | `scripts/cycle.sh [n_demos] [n_eval]` | done; refuses to overwrite existing dataset/checkpoint dirs |
+| Live viewers | `scripts/watch_oracle.py`, `scripts/eval.sh ... --env.show_viewer=true` | done; Genesis viewer + tkinter front\|wrist camera window |
 
 ## Results so far
 
@@ -46,7 +56,7 @@ Success went **38% → 84%** with the same 200 demos / 20k steps recipe. First-c
 - A stray `~/.local/lib/python3.12/site-packages/cmeel*` shadowed pinocchio → `PYTHONNOUSERSITE=1` in `pixi.toml` activation env.
 - `is_success` originally accepted a shove; now latches `_lifted` when cube z > table + 4 cm (`LIFT_HEIGHT`).
 
-## Known gaps / follow-ups (from the final review, not done)
+## Known gaps (from the original review, still open)
 
 1. Cube is not in the oracle's Pinocchio collision model (spec §2 wanted it); free-space RRT could sweep through it. Fine at current ranges.
 2. Oracle plans a retreat segment that is never executed/recorded: `collect.py` breaks on `terminated`, which fires during the release hold. Either drop the segment or record through it (needs re-collection).
@@ -54,21 +64,48 @@ Success went **38% → 84%** with the same 200 demos / 20k steps recipe. First-c
 4. No `close()` on the env; Genesis scenes leak in-process (harmless at n_envs=1).
 5. `slow` pytest marker defined but not excluded by default.
 6. `env` rejects `render_mode=` kwarg despite advertising `rgb_array`.
-7. Second-cycle failure videos (8 episodes listed above) not yet classified (miss grasp vs drop vs place miss).
 
-## Suggested next steps to raise the 84%
+## Next steps (in priority order)
 
-- More demos (`--episodes 500+`; collection ~6 s/episode), longer training (`STEPS=50000`), and/or `GRIPPER_SETTLE_STEPS=8`.
-- Randomize the arm start pose or the zone to reduce near-duplicate early frames.
-- Inspect the 8 failure videos in `outputs/eval/smolvla_rebot/videos/rebot_0/` to classify failure modes.
-- Try `--policy.n_action_steps` smaller than 50 (chunk replan more often) at eval.
+### 1. Classify the 8 failures (~30 min, no compute)
+
+Watch `outputs/eval/smolvla_rebot/videos/rebot_0/eval_episode_{8,10,11,12,25,27,31,35}.mp4` (seeds 1008, 1010,
+1011, 1012, 1025, 1027, 1031, 1035) and bin each into: missed grasp (fingers close beside the cube), grasp then drop,
+placed outside the zone, never released, froze mid-episode, or timed out. Note the cube's spawn position for each;
+if the misses cluster at one edge of `CUBE_X_RANGE`/`CUBE_Y_RANGE`, that points at wrist-camera coverage rather than
+policy capacity. Record the tally here. The fix differs per bin: missed grasp → more demos or a lower
+`n_action_steps`; drop → `GRIP_CLOSED`/`GRIPPER_SETTLE_STEPS`; freeze → the repeated hold frames (gap 3 below).
+
+### 2. Ablate the 38% → 84% jump (3 cycles, ~90 min each, GPU)
+
+Same recipe (200 demos, 20k steps, 50 eval episodes), one change reverted per run:
+
+| Run | Revert | How |
+|---|---|---|
+| A: no hover | oracle hover segment | in `oracle.py` `plan_episode`, delete segment 0 and start segment 1 from `q0` instead of `q_hover` |
+| B: old camera | front camera pose | `scene.py`: `CAM_POS=(1.6, -1.8, 1.5)`, `CAM_LOOKAT=(-0.1, 0.0, TABLE_HEIGHT+0.25)` |
+| C: old lighting | overhead light | `scene.py`: `LIGHT_DIR=(-1,-1,-1)`, `AMBIENT=(0.1,0.1,0.1)` |
+
+For each: move `data/rebot_pick_place` and `outputs/{train,eval}/smolvla_rebot` aside (e.g. suffix `_ablA`), run
+`scripts/cycle.sh 200 50`, note `pc_success`, restore the code. At n=50 and p≈0.84 the binomial standard error is ~5 pts, so only
+differences above ~15 pts are meaningful; if all three land near 84%, the changes were redundant and any one
+would have sufficed. Consider a second seed range (`--seed=2000`) for the winner to firm up the number.
+
+### 3. Raise the ceiling (after 1 and 2)
+
+- More demos (`scripts/cycle.sh 500 50`; collection is ~3 s/episode) and/or longer training (`STEPS=50000`).
+- `--policy.n_action_steps=10` (or 25) at eval only: cheap, replans the chunk more often.
+- `GRIPPER_SETTLE_STEPS=8` in `oracle.py` to cut repeated hold frames (needs re-collection).
+- Randomize the arm start pose or the zone to reduce near-duplicate early frames (needs re-collection).
+- Put the cube into the oracle's collision model (gap 1) if failures show the arm sweeping through it.
 
 ## How to resume
 
 ```bash
-git checkout vla-testbed
-pixi run test                                              # 19 passed
-scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50
+git checkout main
+pixi run test                                                                     # 19 passed, ~2 min
+scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 50  # reproduces 84%, ~2 min
+OUTPUT_DIR=outputs/eval/watch scripts/eval.sh outputs/train/smolvla_rebot/checkpoints/last/pretrained_model 5 --env.show_viewer=true
 ```
-Full training reproduction: `pixi run python scripts/collect.py --episodes 200` (~20 min) → `scripts/train.sh` (~75 min) → `scripts/eval.sh` (~5 min).
-`vla-testbed` is merged into `main`; delete the branch or keep branching from `main`.
+Full retrain: `scripts/cycle.sh 200 50` after moving the current dataset/checkpoint dirs aside (~90 min:
+collect 10, train 75, eval 2). See README "Training a policy" for the individual steps and tuning knobs.
