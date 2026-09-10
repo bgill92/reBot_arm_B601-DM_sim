@@ -30,6 +30,12 @@ ARM_POS = np.array([-(TABLE_W / 2 - 0.1), 0.0, TABLE_HEIGHT])  # near the back (
 CAM_LOOKAT = (-0.25, 0.0, TABLE_HEIGHT + 0.05)  # cube-range center in world coords, just above the table
 CAM_POS = (0.45, -0.9, TABLE_HEIGHT + 0.65)
 
+# Single directional light, nearly overhead. Genesis' default dir (-1, -1, -1) comes in at 45 deg from a
+# corner, so a room wall throws a hard shadow across half the table; near-vertical keeps wall shadows to
+# a thin strip at the base and lights the workspace evenly. Ambient lifted so shadowed faces stay readable.
+LIGHT_DIR = (-0.3, 0.2, -1.0)
+AMBIENT = (0.3, 0.3, 0.3)
+
 # Task objects. xy ranges are in the arm-base frame (x forward, y left).
 CUBE_SIZE = 0.03
 CUBE_X_RANGE = (0.15, 0.35)
@@ -56,6 +62,14 @@ def init_genesis() -> None:
         # breaks lerobot-eval. Genesis places its own tensors explicitly, so removing the mode
         # is safe. Passing None removes the mode instead of swapping in a CPU one.
         torch.set_default_device(None)
+
+
+def vis_options() -> gs.options.VisOptions:
+    """Lighting shared by the viewer and the env cameras."""
+    return gs.options.VisOptions(
+        lights=[{"type": "directional", "dir": LIGHT_DIR, "color": (1.0, 1.0, 1.0), "intensity": 5.0}],
+        ambient_light=AMBIENT,
+    )
 
 
 def local_to_world(xy) -> np.ndarray:

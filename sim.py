@@ -30,6 +30,7 @@ def main() -> None:
     scene = gs.Scene(
         sim_options=gs.options.SimOptions(dt=0.01),
         viewer_options=gs.options.ViewerOptions(camera_pos=S.CAM_POS, camera_lookat=S.CAM_LOOKAT, camera_fov=40),
+        vis_options=S.vis_options(),
         show_viewer=not args.headless,
     )
     S.build_room(scene)
